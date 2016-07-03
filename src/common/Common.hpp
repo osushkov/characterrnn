@@ -41,6 +41,18 @@ Maybe<typename Container::value_type> find_if(Container &container, UnaryPredica
   }
 }
 
+template <class Container, class Function>
+vector<typename Container::value_type> mapped_vector(Container &container, Function fn) {
+  vector<typename Container::value_type> result;
+  result.reserve(container.size());
+
+  for (const auto &e : container) {
+    result.push_back(fn(e));
+  }
+
+  return result;
+}
+
 // This is for C++11 only, C++14 has make_unique defined in the STL
 namespace std {
 template <class T> struct _Unique_if { typedef unique_ptr<T> _Single_object; };

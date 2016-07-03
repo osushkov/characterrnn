@@ -1,6 +1,5 @@
 
 #include "Network.hpp"
-#include "../common/Util.hpp"
 #include "../math/Math.hpp"
 #include "../math/Tensor.hpp"
 #include "Activations.hpp"
@@ -119,7 +118,7 @@ struct Network::NetworkImpl {
     EMatrix result(numRows, numCols);
     for (unsigned r = 0; r < result.rows(); r++) {
       for (unsigned c = 0; c < result.cols(); c++) {
-        result(r, c) = Util::RandInterval(-initRange, initRange);
+        result(r, c) = math::RandInterval(-initRange, initRange);
       }
     }
 

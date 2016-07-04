@@ -9,7 +9,7 @@ public:
   FFNetworkTrainer(unsigned nGramSize);
   ~FFNetworkTrainer();
 
-  uptr<neuralnetwork::Network> TrainLanguageNetwork(CharacterStream &cStream);
+  uptr<neuralnetwork::Network> TrainLanguageNetwork(CharacterStream &cStream, unsigned iters);
 
 private:
   struct FFNetworkTrainerImpl;

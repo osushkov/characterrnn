@@ -15,6 +15,8 @@ struct CharacterStream::CharacterStreamImpl {
     initMappedChars();
   }
 
+  unsigned VectorDimension(void) const { return mappedChars.size(); }
+
   Maybe<math::OneHotVector> ReadCharacter(void) {
     while (true) {
       int nextChar = fileStream.get();
@@ -59,6 +61,11 @@ struct CharacterStream::CharacterStreamImpl {
     return result;
   }
 
+  char Decode(unsigned index) const {
+    assert(index < mappedChars.size());
+    return mappedChars[index];
+  }
+
   void initMappedChars(void) {
     mappedChars = {' ', '.', '!', '?', '\"', '\'', '(', ')', '[', ']', '{', '}', '-',
                    '@', '#', '$', '%', '&',  '*',  '<', '>', ':', ';', '/', '\\'};
@@ -88,8 +95,12 @@ CharacterStream::CharacterStream(const string &filePath)
 
 CharacterStream::~CharacterStream() = default;
 
+unsigned CharacterStream::VectorDimension(void) const { return impl->VectorDimension(); }
+
 Maybe<math::OneHotVector> CharacterStream::ReadCharacter(void) { return impl->ReadCharacter(); }
 
 vector<math::OneHotVector> CharacterStream::ReadCharacters(unsigned max) {
   return impl->ReadCharacters(max);
 }
+
+char CharacterStream::Decode(unsigned index) const { return impl->Decode(index); }

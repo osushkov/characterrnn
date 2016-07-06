@@ -3,6 +3,7 @@
 #include "FFNetworkSampler.hpp"
 #include "FFNetworkTrainer.hpp"
 #include "common/Common.hpp"
+#include "neuralnetwork/rnn/RNN.hpp"
 
 static constexpr unsigned NGRAM_SIZE = 4;
 

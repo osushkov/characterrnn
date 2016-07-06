@@ -1,0 +1,8 @@
+include_rules
+: src/*.o \
+src/neuralnetwork/rnn/rnn.a \
+src/neuralnetwork/neuralnetwork.a \
+src/neuralnetwork/cuda/cuda.a \
+src/math/math.a \
+src/common/common.a \
+|> $(CC) %f -o %o $(CLFLAGS) |> characterrnn

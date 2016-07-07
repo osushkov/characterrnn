@@ -2,6 +2,7 @@
 
 #include "MatrixView.hpp"
 #include <Eigen/Dense>
+#include <cassert>
 #include <cmath>
 #include <cstdlib>
 
@@ -38,5 +39,27 @@ static inline float GaussianSample(float mean, float sd) {
 
   // Box-Muller transform
   return mean + sd * y * sqrtf(-2.0f * logf(r2) / r2);
+}
+
+static inline EVector SoftmaxActivations(const EVector &in) {
+  assert(in.rows() > 0);
+  EVector result(in.rows());
+
+  float maxVal = in(0);
+  for (int r = 0; r < in.rows(); r++) {
+    maxVal = fmax(maxVal, in(r));
+  }
+
+  float sum = 0.0f;
+  for (int i = 0; i < in.rows(); i++) {
+    result(i) = expf(in(i)-maxVal);
+    sum += result(i);
+  }
+
+  for (int i = 0; i < result.rows(); i++) {
+    result(i) /= sum;
+  }
+
+  return result;
 }
 }

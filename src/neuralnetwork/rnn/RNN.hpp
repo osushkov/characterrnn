@@ -15,7 +15,7 @@ public:
   virtual ~RNN();
 
   void ClearMemory(void);
-  EVector Process(const EVector &input);
+  EMatrix Process(const EMatrix &input);
   void Update(const SamplesProvider &samplesProvider);
 
 private:

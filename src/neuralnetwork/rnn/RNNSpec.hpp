@@ -17,6 +17,7 @@ struct LayerConnection {
 struct LayerSpec {
   unsigned uid;
   unsigned numNodes;
+  bool isOutput;
 
   std::vector<LayerConnection> inConnections;
 };

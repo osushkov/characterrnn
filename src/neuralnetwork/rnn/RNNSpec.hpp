@@ -12,6 +12,11 @@ struct LayerConnection {
   unsigned dstLayerId;
 
   int timeOffset; // should be <= 0
+
+  bool operator==(const LayerConnection &other) {
+    return this->srcLayerId == other.srcLayerId && this->dstLayerId == other.dstLayerId &&
+           this->timeOffset == other.timeOffset;
+  }
 };
 
 struct LayerSpec {

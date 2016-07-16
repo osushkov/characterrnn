@@ -5,50 +5,39 @@
 using namespace neuralnetwork;
 using namespace neuralnetwork::rnn;
 
-LayerMemory::LayerMemory(unsigned historyLength)
-    : memory(historyLength), head(0), tail(0), lastTimestamp(-1) {
-  assert(historyLength > 0);
-  for (auto &m : memory) {
-    m.timestamp = -1;
-  }
-}
+LayerMemory::LayerMemory() : lastTimestamp(-1) {}
 
-LayerMemoryData *LayerMemory::GetLayerData(int timestamp, unsigned layerId) {
+// TODO: use const_cast to avoid duplication.
+const TimeSlice *LayerMemory::GetTimeSlice(int timestamp) const {
   assert(timestamp >= 0);
 
   for (auto &ts : memory) {
     if (ts.timestamp == timestamp) {
-      for (auto &lmd : ts.layers) {
-        if (lmd.layerId == layerId) {
-          return &lmd;
-        }
-      }
-      return nullptr;
+      return &ts;
     }
   }
 
   return nullptr;
 }
 
-void LayerMemory::PushNewSlice(const TimeSlice &slice) {
+TimeSlice *LayerMemory::GetTimeSlice(int timestamp) {
+  assert(timestamp >= 0);
+
+  for (auto &ts : memory) {
+    if (ts.timestamp == timestamp) {
+      return &ts;
+    }
+  }
+
+  return nullptr;
+}
+
+TimeSlice *LayerMemory::PushNewSlice(const TimeSlice &slice) {
   assert(slice.timestamp >= 0);
   assert(slice.timestamp > lastTimestamp);
 
+  memory.push_back(slice);
   lastTimestamp = slice.timestamp;
-  memory[tail] = slice;
 
-  tail = (tail + 1) % memory.size();
-  if (tail == head) {
-    head = (head + 1) % memory.size();
-  }
-}
-
-void LayerMemory::Clear(void) {
-  head = 0;
-  tail = 0;
-  lastTimestamp = -1;
-
-  for (auto &m : memory) {
-    m.timestamp = -1;
-  }
+  return &memory.back();
 }

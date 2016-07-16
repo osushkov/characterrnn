@@ -3,37 +3,23 @@
 
 #include "../../common/Common.hpp"
 #include "../../math/Math.hpp"
+#include "TimeSlice.hpp"
 #include <vector>
 
 namespace neuralnetwork {
 namespace rnn {
 
-struct LayerMemoryData {
-  EMatrix output; // batch output, column per batch element.
-  EMatrix derivative;
-  EMatrix delta;
-
-  unsigned layerId;
-};
-
-struct TimeSlice {
-  int timestamp;
-  vector<LayerMemoryData> layers;
-};
-
 class LayerMemory {
 public:
-  LayerMemory(unsigned historyLength);
+  LayerMemory();
 
-  LayerMemoryData *GetLayerData(int timestamp, unsigned layerId);
-  void PushNewSlice(const TimeSlice &slice);
-  void Clear(void);
+  const TimeSlice *GetTimeSlice(int timestamp) const;
+  TimeSlice *GetTimeSlice(int timestamp);
+
+  TimeSlice *PushNewSlice(const TimeSlice &slice);
 
 private:
   vector<TimeSlice> memory;
-  unsigned head;
-  unsigned tail;
-
   int lastTimestamp;
 };
 }

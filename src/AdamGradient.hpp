@@ -22,6 +22,7 @@ private:
   math::Tensor initialMomentum(const math::Tensor &gradient);
   math::Tensor initialRMS(const math::Tensor &gradient);
 
-  void updateMomentum(math::Tensor &momentum, const math::Tensor &gradient);
-  void updateRMS(math::Tensor &rms, const math::Tensor &gradient);
+  void updateMomentum(const math::Tensor &gradient);
+  void updateRMS(const math::Tensor &gradient);
+  math::Tensor computeWeightUpdate(void);
 };

@@ -23,12 +23,12 @@ math::Tensor AdamGradient::initialRMS(const math::Tensor &gradient) {
   return result;
 }
 
-void AdamGradient::updateMomentum(math::Tensor &momentum, const math::Tensor &gradient) {
+void AdamGradient::updateMomentum(const math::Tensor &gradient) {
   assert(gradient.NumLayers() == momentum.NumLayers());
   momentum = momentum * beta1 + gradient * (1.0f - beta1);
 }
 
-void AdamGradient::updateRMS(math::Tensor &rms, const math::Tensor &gradient) {
+void AdamGradient::updateRMS(const math::Tensor &gradient) {
   assert(gradient.NumLayers() == rms.NumLayers());
 
   for (unsigned i = 0; i < gradient.NumLayers(); i++) {
@@ -42,4 +42,21 @@ void AdamGradient::updateRMS(math::Tensor &rms, const math::Tensor &gradient) {
       }
     }
   }
+}
+
+math::Tensor AdamGradient::computeWeightUpdate(void) {
+  math::Tensor update = momentum; // just to get the dimensionality right.
+
+  for (unsigned i = 0; i < rms.NumLayers(); i++) {
+    for (int y = 0; y < rms(i).rows(); y++) {
+      for (int x = 0; x < rms(i).cols(); x++) {
+        float mc = momentum(i)(y, x) / (1.0f - beta1);
+        float rc = rms(i)(y, x) / (1.0f - beta2);
+
+        update(i)(y, x) = -lr * mc / sqrtf(rc + epsilon);
+      }
+    }
+  }
+
+  return update;
 }

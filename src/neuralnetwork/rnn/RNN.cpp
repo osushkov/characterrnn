@@ -124,10 +124,16 @@ struct RNN::RNNImpl {
     }
   }
 
-  void backprop(const SliceBatch &slice, int timestamp, LayerMemory &memory,
+  void backprop(const SliceBatch &sliceBatch, int timestamp, const LayerMemory &memory,
                 NetworkWeightsAccum &weightsAccum) {
+    const TimeSlice *networkSlice = memory.GetTimeSlice(timestamp);
+    assert(networkSlice != nullptr);
 
-    // Layer &lastLayer = layers.back();
+    const LayerMemoryData *outputMemory = networkSlice->GetLayerData(layers.back().layerId);
+    assert(outputMemory != nullptr);
+
+    EMatrix outputDelta = outputMemory->output - sliceBatch.batchOutput;
+    recursiveBackprop(layers.back(), timestamp, outputDelta, memory, weightsAccum);
   }
 
   void recursiveBackprop(const Layer &layer, int timestamp, const EMatrix &delta,

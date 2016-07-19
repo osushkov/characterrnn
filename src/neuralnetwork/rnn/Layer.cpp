@@ -8,11 +8,16 @@ using namespace neuralnetwork;
 using namespace neuralnetwork::rnn;
 
 static unsigned numLayerOutputs(const RNNSpec &spec, unsigned layerId) {
+  if (layerId == 0) {
+    return spec.numInputs;
+  }
+
   for (const auto &ls : spec.layers) {
     if (ls.uid == layerId) {
       return ls.numNodes;
     }
   }
+
   assert(false);
   return 0;
 }

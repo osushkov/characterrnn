@@ -1,34 +1,106 @@
 
 #include "RNNTrainer.hpp"
+#include "AdamGradient.hpp"
+
+#include <tbb/blocked_range.h>
+#include <tbb/parallel_for.h>
+#include <tbb/task_scheduler_init.h>
+#include <tbb/tbb.h>
+
+#include <atomic>
+#include <cassert>
+#include <cmath>
+#include <future>
+#include <iostream>
+#include <thread>
 
 using namespace neuralnetwork;
 using namespace neuralnetwork::rnn;
 
 static constexpr unsigned TRAINING_SIZE = 10 * 1000 * 1000;
-static constexpr unsigned BATCH_SIZE = 100;
+static constexpr unsigned BATCH_SIZE = 500;
 
 struct RNNTrainer::RNNTrainerImpl {
   unsigned traceLength;
+  AdamGradient gradientPolicy;
 
   RNNTrainerImpl(unsigned traceLength) : traceLength(traceLength) {}
 
   uptr<RNN> TrainLanguageNetwork(CharacterStream &cStream, unsigned iters) {
+    const unsigned numSubsets = tbb::task_scheduler_init::default_num_threads();
+
     uptr<RNN> network = createNewNetwork(cStream.VectorDimension(), cStream.VectorDimension());
 
     vector<math::OneHotVector> letters = cStream.ReadCharacters(TRAINING_SIZE);
     for (unsigned i = 0; i < iters; i++) {
-      vector<SliceBatch> batch = makeBatch(letters);
-      math::Tensor gradient = updateGradient(network->ComputeGradient(batch));
+      if (i % 100 == 0) {
+        cout << i << "/" << iters << endl;
+      }
+
+      mutex gradientMutex;
+      vector<math::Tensor> gradients;
+
+      RNN *net = network.get();
+      auto gradientWorker = [this, net, numSubsets, &letters, &gradients,
+                             &gradientMutex](const tbb::blocked_range<unsigned> &r) {
+
+        vector<SliceBatch> batch = this->makeBatch(letters, BATCH_SIZE / numSubsets);
+        math::Tensor gradient = net->ComputeGradient(batch);
+
+        {
+          std::unique_lock<std::mutex> lock(gradientMutex);
+          gradients.push_back(gradient);
+        }
+      };
+
+      tbb::parallel_for(tbb::blocked_range<unsigned>(0, numSubsets), gradientWorker);
+      assert(gradients.size() > 0);
+
+      math::Tensor gradient = gradients[0];
+      for (unsigned j = 1; j < gradients.size(); j++) {
+        gradient += gradients[j];
+      }
+      gradient = gradientPolicy.UpdateGradient(gradient * (1.0f / gradients.size()));
       network->UpdateWeights(gradient);
     }
 
     return move(network);
   }
 
-  math::Tensor updateGradient(const math::Tensor &gradient) { return gradient; }
+  vector<SliceBatch> makeBatch(const vector<math::OneHotVector> &trainingData, unsigned batchSize) {
+    assert(trainingData.size() > traceLength);
 
-  vector<SliceBatch> makeBatch(const vector<math::OneHotVector> &trainingData) {
-    return vector<SliceBatch>();
+    unsigned dim = trainingData.front().dim;
+
+    vector<SliceBatch> result;
+    result.reserve(traceLength);
+
+    vector<unsigned> indices = createTraceStartIndices(trainingData.size(), batchSize);
+    for (unsigned i = 0; i < traceLength; i++) {
+      EMatrix input(dim, batchSize);
+      EMatrix output(dim, batchSize);
+
+      for (unsigned j = 0; j < batchSize; j++) {
+        assert(trainingData[indices[j]].dim == dim);
+        assert(trainingData[indices[j] + 1].dim == dim);
+
+        input.col(j) = trainingData[indices[j]].DenseVector();
+        output.col(j) = trainingData[indices[j] + 1].DenseVector();
+        indices[j]++;
+      }
+
+      result.emplace_back(input, output);
+    }
+
+    return result;
+  }
+
+  vector<unsigned> createTraceStartIndices(unsigned dataLength, unsigned batchSize) {
+    vector<unsigned> indices;
+    for (unsigned i = 0; i < batchSize; i++) {
+      indices.push_back(rand() % (dataLength - traceLength - 1));
+    }
+    return indices;
   }
 
   uptr<RNN> createNewNetwork(unsigned inputSize, unsigned outputSize) {
@@ -36,7 +108,7 @@ struct RNNTrainer::RNNTrainerImpl {
 
     spec.numInputs = inputSize;
     spec.numOutputs = outputSize;
-    spec.hiddenActivation = LayerActivation::TANH;
+    spec.hiddenActivation = LayerActivation::LEAKY_RELU;
     spec.outputActivation = LayerActivation::SOFTMAX;
     spec.nodeActivationRate = 1.0f;
 

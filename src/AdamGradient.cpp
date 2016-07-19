@@ -3,9 +3,20 @@
 #include <cassert>
 
 AdamGradient::AdamGradient()
-    : beta1(0.9f), beta2(0.999f), epsilon(10e-8), lr(0.001f), isFirstUpdate(false) {}
+    : beta1(0.9f), beta2(0.999f), epsilon(10e-8), lr(0.001f), isFirstUpdate(true) {}
 
-math::Tensor AdamGradient::UpdateGradient(const math::Tensor &gradient) { return gradient; }
+math::Tensor AdamGradient::UpdateGradient(const math::Tensor &gradient) {
+  if (isFirstUpdate) {
+    momentum = initialMomentum(gradient);
+    rms = initialRMS(gradient);
+    isFirstUpdate = false;
+  }
+
+  updateMomentum(gradient);
+  updateRMS(gradient);
+
+  return computeWeightUpdate();
+}
 
 math::Tensor AdamGradient::initialMomentum(const math::Tensor &gradient) {
   math::Tensor result = gradient;

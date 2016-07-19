@@ -21,5 +21,6 @@ endif
 
 CLFLAGS += -L/usr/local/cuda/lib64 -lcudart
 CLFLAGS += -L/usr/local/lib
+CLFLAGS += -ltbb
 CLFLAGS += -lpthread
 CLFLAGS += `pkg-config opencv --cflags --libs`

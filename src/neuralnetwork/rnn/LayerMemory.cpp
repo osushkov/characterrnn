@@ -9,8 +9,6 @@ LayerMemory::LayerMemory() : lastTimestamp(-1) {}
 
 // TODO: use const_cast to avoid duplication.
 const TimeSlice *LayerMemory::GetTimeSlice(int timestamp) const {
-  assert(timestamp >= 0);
-
   for (auto &ts : memory) {
     if (ts.timestamp == timestamp) {
       return &ts;
@@ -21,8 +19,6 @@ const TimeSlice *LayerMemory::GetTimeSlice(int timestamp) const {
 }
 
 TimeSlice *LayerMemory::GetTimeSlice(int timestamp) {
-  assert(timestamp >= 0);
-
   for (auto &ts : memory) {
     if (ts.timestamp == timestamp) {
       return &ts;

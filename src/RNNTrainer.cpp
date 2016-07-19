@@ -33,7 +33,7 @@ struct RNNTrainer::RNNTrainerImpl {
 
     vector<math::OneHotVector> letters = cStream.ReadCharacters(TRAINING_SIZE);
     for (unsigned i = 0; i < iters; i++) {
-      if (i % 100 == 0) {
+      if (i % 100 == 0 || true) {
         cout << i << "/" << iters << endl;
       }
 
@@ -126,8 +126,9 @@ struct RNNTrainer::RNNTrainerImpl {
     LayerConnection lc_r_12(1, 2, -1);
     LayerConnection lc_r_21(2, 1, -1);
 
-    spec.layers.emplace_back(1, 128, false, vector<LayerConnection>{lc_input_1, lc_r_11, lc_r_21});
-    spec.layers.emplace_back(2, 128, false, vector<LayerConnection>{lc_1_2, lc_r_22, lc_r_12});
+    spec.layers.emplace_back(1, 128, false,
+                             vector<LayerConnection>{lc_input_1, lc_r_11 /*, lc_r_21*/});
+    spec.layers.emplace_back(2, 128, false, vector<LayerConnection>{lc_1_2, lc_r_22 /*, lc_r_12*/});
     spec.layers.emplace_back(3, outputSize, true, vector<LayerConnection>{lc_2_output});
 
     return make_unique<RNN>(spec);

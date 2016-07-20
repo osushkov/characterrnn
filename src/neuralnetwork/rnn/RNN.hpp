@@ -21,7 +21,10 @@ struct SliceBatch {
 class RNN {
 public:
   RNN(const RNNSpec &spec);
+  RNN(const RNN &other);
   virtual ~RNN();
+
+  RNN &operator=(const RNN &other);
 
   void ClearMemory(void);
   EMatrix Process(const EMatrix &input);

@@ -63,6 +63,9 @@ struct RNN::RNNImpl {
     }
   }
 
+  RNNImpl(const RNNImpl &other)
+      : spec(other.spec), layers(other.layers), previous(other.previous) {}
+
   void ClearMemory(void) { previous = Maybe<TimeSlice>::none; }
 
   EMatrix Process(const EMatrix &input) {
@@ -71,7 +74,7 @@ struct RNN::RNNImpl {
     TimeSlice *prevSlice = previous.valid() ? &(previous.val()) : nullptr;
     TimeSlice curSlice(0, input, layers);
 
-    EMatrix output = forwardPass(input, prevSlice, curSlice);
+    EMatrix output = forwardPass(input, prevSlice, curSlice, false);
     previous = Maybe<TimeSlice>(curSlice);
     return output;
   }
@@ -87,7 +90,7 @@ struct RNN::RNNImpl {
     for (unsigned i = 0; i < trace.size(); i++) {
       TimeSlice curSlice(i, trace[i].batchInput, layers);
 
-      EMatrix out = forwardPass(trace[i].batchInput, prevSlice, curSlice);
+      EMatrix out = forwardPass(trace[i].batchInput, prevSlice, curSlice, true);
       traceOutputs.push_back(out);
 
       prevSlice = memory.PushNewSlice(curSlice);
@@ -193,10 +196,12 @@ struct RNN::RNNImpl {
     return layers.back();
   }
 
-  EMatrix forwardPass(const EMatrix &input, const TimeSlice *prevSlice, TimeSlice &curSlice) {
+  EMatrix forwardPass(const EMatrix &input, const TimeSlice *prevSlice, TimeSlice &curSlice,
+                      bool doDropout) {
     EMatrix output;
     for (const auto &layer : layers) {
-      pair<EMatrix, EMatrix> layerOut = getLayerOutput(layer, prevSlice, curSlice, input);
+      pair<EMatrix, EMatrix> layerOut =
+          getLayerOutput(layer, prevSlice, curSlice, input, doDropout);
 
       LayerMemoryData *lmd = curSlice.GetLayerData(layer.layerId);
       assert(lmd != nullptr);
@@ -217,12 +222,14 @@ struct RNN::RNNImpl {
 
   // Returns the output vector of the layer, and the derivative vector for the layer.
   pair<EMatrix, EMatrix> getLayerOutput(const Layer &layer, const TimeSlice *prevSlice,
-                                        const TimeSlice &curSlice, const EMatrix &networkInput) {
+                                        const TimeSlice &curSlice, const EMatrix &networkInput,
+                                        bool doDropout) {
     EMatrix incoming(layer.numNodes, networkInput.cols());
     incoming.fill(0.0f);
 
     for (const auto &connection : layer.weights) {
-      incrementIncomingWithConnection(connection, prevSlice, curSlice, networkInput, incoming);
+      incrementIncomingWithConnection(connection, prevSlice, curSlice, networkInput, incoming,
+                                      doDropout);
     }
 
     return performLayerActivations(layer, incoming);
@@ -230,7 +237,8 @@ struct RNN::RNNImpl {
 
   void incrementIncomingWithConnection(const pair<LayerConnection, EMatrix> &connection,
                                        const TimeSlice *prevSlice, const TimeSlice &curSlice,
-                                       const EMatrix &networkInput, EMatrix &incoming) {
+                                       const EMatrix &networkInput, EMatrix &incoming,
+                                       bool doDropout) {
 
     if (connection.first.srcLayerId == 0) { // special case for input
       assert(connection.first.timeOffset == 0);
@@ -248,8 +256,26 @@ struct RNN::RNNImpl {
 
       if (layerMemory != nullptr) {
         assert(layerMemory->haveOutput);
-        incoming += connection.second * getInputWithBias(layerMemory->output);
+
+        EMatrix input = applyDropout(layerMemory->output, connection.first.timeOffset, doDropout);
+        incoming += connection.second * getInputWithBias(input);
       }
+    }
+  }
+
+  EMatrix applyDropout(const EMatrix &original, int timeOffset, bool doDropout) {
+    if (timeOffset == -1) {
+      return original;
+    } else if (!doDropout) {
+      return original * spec.nodeActivationRate;
+    } else {
+      EMatrix result(original.rows(), original.cols());
+      for (int c = 0; c < result.cols(); c++) {
+        for (int r = 0; r < result.rows(); r++) {
+          result(r, c) = math::UnitRand() < spec.nodeActivationRate ? original(r, c) : 0.0f;
+        }
+      }
+      return result;
     }
   }
 
@@ -283,7 +309,14 @@ struct RNN::RNNImpl {
 };
 
 RNN::RNN(const RNNSpec &spec) : impl(new RNNImpl(spec)) {}
+RNN::RNN(const RNN &other) : impl(new RNNImpl(*other.impl)) {}
+
 RNN::~RNN() = default;
+
+RNN &RNN::operator=(const RNN &other) {
+  impl.reset(new RNNImpl(*other.impl));
+  return *this;
+}
 
 void RNN::ClearMemory(void) { impl->ClearMemory(); }
 EMatrix RNN::Process(const EMatrix &input) { return impl->Process(input); }

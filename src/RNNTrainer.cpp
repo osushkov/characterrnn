@@ -18,7 +18,7 @@ using namespace neuralnetwork;
 using namespace neuralnetwork::rnn;
 
 static constexpr unsigned TRAINING_SIZE = 10 * 1000 * 1000;
-static constexpr unsigned BATCH_SIZE = 120;
+static constexpr unsigned BATCH_SIZE = 128;
 
 struct RNNTrainer::RNNTrainerImpl {
   unsigned traceLength;
@@ -110,7 +110,7 @@ struct RNNTrainer::RNNTrainerImpl {
     spec.numOutputs = outputSize;
     spec.hiddenActivation = LayerActivation::ELU;
     spec.outputActivation = LayerActivation::SOFTMAX;
-    spec.nodeActivationRate = 1.0f;
+    spec.nodeActivationRate = 0.7f;
 
     // Connect layer 1 to the input.
     LayerConnection lc_input_1(0, 1, 0);
@@ -123,8 +123,8 @@ struct RNNTrainer::RNNTrainerImpl {
     LayerConnection lc_r_11(1, 1, -1);
     LayerConnection lc_r_22(2, 2, -1);
 
-    //LayerConnection lc_r_12(1, 2, -1);
-    //LayerConnection lc_r_21(2, 1, -1);
+    // LayerConnection lc_r_12(1, 2, -1);
+    // LayerConnection lc_r_21(2, 1, -1);
 
     spec.layers.emplace_back(1, 128, false, vector<LayerConnection>{lc_input_1, lc_r_11});
     spec.layers.emplace_back(2, 128, false, vector<LayerConnection>{lc_1_2, lc_r_22});

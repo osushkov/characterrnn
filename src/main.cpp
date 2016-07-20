@@ -29,10 +29,10 @@ void testRNN(string path) {
   CharacterStream cstream(path);
 
   RNNTrainer trainer(5);
-  auto network = trainer.TrainLanguageNetwork(cstream, 100000);
+  auto network = trainer.TrainLanguageNetwork(cstream, 10000);
 
   RNNSampler sampler(cstream.VectorDimension());
-  vector<unsigned> sampled = sampler.SampleCharacters(network.get(), 10000);
+  vector<unsigned> sampled = sampler.SampleCharacters(network.get(), 1000);
 
   for (const auto sample : sampled) {
     cout << cstream.Decode(sample);

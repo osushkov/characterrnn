@@ -19,7 +19,9 @@ struct RNNSampler::RNNSamplerImpl {
     return result;
   }
 
-  unsigned sampleChar(neuralnetwork::rnn::RNN *network, const vector<unsigned> &prevChars) {
+  unsigned sampleChar(neuralnetwork::rnn::RNN *rnn, const vector<unsigned> &prevChars) {
+    neuralnetwork::rnn::RNN network(*rnn);
+
     EVector input(letterDim);
     input.fill(0.0f);
 
@@ -27,7 +29,7 @@ struct RNNSampler::RNNSamplerImpl {
       input(prevChars.back()) = 1.0f;
     }
 
-    EVector pChar = network->Process(input);
+    EVector pChar = network.Process(input);
     float r = math::UnitRand();
 
     for (int i = 0; i < pChar.rows(); i++) {

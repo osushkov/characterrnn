@@ -5,7 +5,7 @@
 
 namespace neuralnetwork {
 
-enum class LayerActivation { TANH, LOGISTIC, RELU, LEAKY_RELU, LINEAR, SOFTMAX };
+enum class LayerActivation { TANH, LOGISTIC, RELU, LEAKY_RELU, ELU, LINEAR, SOFTMAX };
 
 struct NetworkSpec {
   unsigned numInputs;

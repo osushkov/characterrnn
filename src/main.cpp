@@ -28,7 +28,7 @@ void testFFNetwork(string path) {
 void testRNN(string path) {
   CharacterStream cstream(path);
 
-  RNNTrainer trainer(10);
+  RNNTrainer trainer(5);
   auto network = trainer.TrainLanguageNetwork(cstream, 100000);
 
   RNNSampler sampler(cstream.VectorDimension());

@@ -18,7 +18,7 @@ using namespace neuralnetwork;
 using namespace neuralnetwork::rnn;
 
 static constexpr unsigned TRAINING_SIZE = 10 * 1000 * 1000;
-static constexpr unsigned BATCH_SIZE = 500;
+static constexpr unsigned BATCH_SIZE = 120;
 
 struct RNNTrainer::RNNTrainerImpl {
   unsigned traceLength;
@@ -33,7 +33,7 @@ struct RNNTrainer::RNNTrainerImpl {
 
     vector<math::OneHotVector> letters = cStream.ReadCharacters(TRAINING_SIZE);
     for (unsigned i = 0; i < iters; i++) {
-      if (i % 100 == 0 || true) {
+      if (i % 100 == 0) {
         cout << i << "/" << iters << endl;
       }
 
@@ -108,7 +108,7 @@ struct RNNTrainer::RNNTrainerImpl {
 
     spec.numInputs = inputSize;
     spec.numOutputs = outputSize;
-    spec.hiddenActivation = LayerActivation::LEAKY_RELU;
+    spec.hiddenActivation = LayerActivation::ELU;
     spec.outputActivation = LayerActivation::SOFTMAX;
     spec.nodeActivationRate = 1.0f;
 
@@ -123,12 +123,11 @@ struct RNNTrainer::RNNTrainerImpl {
     LayerConnection lc_r_11(1, 1, -1);
     LayerConnection lc_r_22(2, 2, -1);
 
-    LayerConnection lc_r_12(1, 2, -1);
-    LayerConnection lc_r_21(2, 1, -1);
+    //LayerConnection lc_r_12(1, 2, -1);
+    //LayerConnection lc_r_21(2, 1, -1);
 
-    spec.layers.emplace_back(1, 128, false,
-                             vector<LayerConnection>{lc_input_1, lc_r_11 /*, lc_r_21*/});
-    spec.layers.emplace_back(2, 128, false, vector<LayerConnection>{lc_1_2, lc_r_22 /*, lc_r_12*/});
+    spec.layers.emplace_back(1, 128, false, vector<LayerConnection>{lc_input_1, lc_r_11});
+    spec.layers.emplace_back(2, 128, false, vector<LayerConnection>{lc_1_2, lc_r_22});
     spec.layers.emplace_back(3, outputSize, true, vector<LayerConnection>{lc_2_output});
 
     return make_unique<RNN>(spec);

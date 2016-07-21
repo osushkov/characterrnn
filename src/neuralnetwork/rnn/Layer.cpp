@@ -30,7 +30,8 @@ static EMatrix createWeightsMatrix(unsigned inputSize, unsigned outputSize) {
 
   for (unsigned r = 0; r < result.rows(); r++) {
     for (unsigned c = 0; c < result.cols(); c++) {
-      // TODO: consider replacing this with a Gaussian with std-dev of initRange.
+      // TODO: consider replacing this with a Gaussian with std-dev of
+      // initRange.
       result(r, c) = math::RandInterval(-initRange, initRange);
     }
   }
@@ -40,26 +41,26 @@ static EMatrix createWeightsMatrix(unsigned inputSize, unsigned outputSize) {
 
 Layer::Layer(const RNNSpec &nnSpec, const LayerSpec &layerSpec)
     : layerId(layerSpec.uid),
-      activation(layerSpec.isOutput ? nnSpec.outputActivation : nnSpec.hiddenActivation),
-      numNodes(layerSpec.numNodes), isOutput(layerSpec.isOutput) {
+      activation(layerSpec.isOutput ? nnSpec.outputActivation
+                                    : nnSpec.hiddenActivation),
+      numNodes(layerSpec.numNodes), isOutput(layerSpec.isOutput),
+      numOutgoingConnections(0) {
 
   assert(layerSpec.uid != 0); // 0 is reserved for the input.
   if (isOutput) {
     assert(numNodes == nnSpec.numOutputs);
   }
 
-  for (const auto &lc : layerSpec.inConnections) {
-    assert(lc.dstLayerId == layerId);
+  for (const auto &lc : nnSpec.connections) {
     assert(lc.timeOffset == 0 || lc.timeOffset == -1);
 
-    // +1 accounts for the bias.
-    unsigned inputSize = numLayerOutputs(nnSpec, lc.srcLayerId) + 1;
-    EMatrix weightsMatrix = createWeightsMatrix(inputSize, numNodes);
-    weights.emplace_back(lc, weightsMatrix);
-
-    // EMatrix accumMatrix = weightsMatrix;
-    // accumMatrix.fill(0.0f);
-    // layer.accumulatedGradient.push_back(accumMatrix);
-    // layer.numSamples.push_back(0);
+    if (lc.dstLayerId == layerId) {
+      // +1 accounts for the bias.
+      unsigned inputSize = numLayerOutputs(nnSpec, lc.srcLayerId) + 1;
+      EMatrix weightsMatrix = createWeightsMatrix(inputSize, numNodes);
+      weights.emplace_back(lc, weightsMatrix);
+    } else if (lc.srcLayerId == layerId) {
+      numOutgoingConnections++;
+    }
   }
 }

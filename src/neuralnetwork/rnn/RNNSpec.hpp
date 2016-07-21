@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "../../common/Common.hpp"
 #include "../NetworkSpec.hpp"
 #include <cassert>
 #include <vector>
@@ -20,7 +21,8 @@ struct LayerConnection {
   }
 
   bool operator==(const LayerConnection &other) {
-    return this->srcLayerId == other.srcLayerId && this->dstLayerId == other.dstLayerId &&
+    return this->srcLayerId == other.srcLayerId &&
+           this->dstLayerId == other.dstLayerId &&
            this->timeOffset == other.timeOffset;
   }
 };
@@ -30,21 +32,18 @@ struct LayerSpec {
   unsigned numNodes;
   bool isOutput;
 
-  std::vector<LayerConnection> inConnections;
-
-  LayerSpec(unsigned uid, unsigned numNodes, bool isOutput,
-            const std::vector<LayerConnection> &inConnections)
-      : uid(uid), numNodes(numNodes), isOutput(isOutput), inConnections(inConnections) {
+  LayerSpec(unsigned uid, unsigned numNodes, bool isOutput)
+      : uid(uid), numNodes(numNodes), isOutput(isOutput) {
     assert(uid >= 1);
     assert(numNodes > 0);
-    assert(inConnections.size() > 0);
   }
 };
 
 struct RNNSpec {
   unsigned numInputs;
   unsigned numOutputs;
-  std::vector<LayerSpec> layers;
+  vector<LayerSpec> layers;
+  vector<LayerConnection> connections;
 
   LayerActivation hiddenActivation;
   LayerActivation outputActivation;

@@ -29,7 +29,8 @@ struct RNNTrainer::RNNTrainerImpl {
   uptr<RNN> TrainLanguageNetwork(CharacterStream &cStream, unsigned iters) {
     const unsigned numSubsets = tbb::task_scheduler_init::default_num_threads();
 
-    uptr<RNN> network = createNewNetwork(cStream.VectorDimension(), cStream.VectorDimension());
+    uptr<RNN> network =
+        createNewNetwork(cStream.VectorDimension(), cStream.VectorDimension());
 
     vector<math::OneHotVector> letters = cStream.ReadCharacters(TRAINING_SIZE);
     for (unsigned i = 0; i < iters; i++) {
@@ -41,33 +42,38 @@ struct RNNTrainer::RNNTrainerImpl {
       vector<math::Tensor> gradients;
 
       RNN *net = network.get();
-      auto gradientWorker = [this, net, numSubsets, &letters, &gradients,
-                             &gradientMutex](const tbb::blocked_range<unsigned> &r) {
+      auto gradientWorker =
+          [this, net, numSubsets, &letters, &gradients,
+           &gradientMutex](const tbb::blocked_range<unsigned> &r) {
 
-        vector<SliceBatch> batch = this->makeBatch(letters, BATCH_SIZE / numSubsets);
-        math::Tensor gradient = net->ComputeGradient(batch);
+            vector<SliceBatch> batch =
+                this->makeBatch(letters, BATCH_SIZE / numSubsets);
+            math::Tensor gradient = net->ComputeGradient(batch);
 
-        {
-          std::unique_lock<std::mutex> lock(gradientMutex);
-          gradients.push_back(gradient);
-        }
-      };
+            {
+              std::unique_lock<std::mutex> lock(gradientMutex);
+              gradients.push_back(gradient);
+            }
+          };
 
-      tbb::parallel_for(tbb::blocked_range<unsigned>(0, numSubsets), gradientWorker);
+      tbb::parallel_for(tbb::blocked_range<unsigned>(0, numSubsets),
+                        gradientWorker);
       assert(gradients.size() > 0);
 
       math::Tensor gradient = gradients[0];
       for (unsigned j = 1; j < gradients.size(); j++) {
         gradient += gradients[j];
       }
-      gradient = gradientPolicy.UpdateGradient(gradient * (1.0f / gradients.size()));
+      gradient =
+          gradientPolicy.UpdateGradient(gradient * (1.0f / gradients.size()));
       network->UpdateWeights(gradient);
     }
 
     return move(network);
   }
 
-  vector<SliceBatch> makeBatch(const vector<math::OneHotVector> &trainingData, unsigned batchSize) {
+  vector<SliceBatch> makeBatch(const vector<math::OneHotVector> &trainingData,
+                               unsigned batchSize) {
     assert(trainingData.size() > traceLength);
 
     unsigned dim = trainingData.front().dim;
@@ -75,7 +81,8 @@ struct RNNTrainer::RNNTrainerImpl {
     vector<SliceBatch> result;
     result.reserve(traceLength);
 
-    vector<unsigned> indices = createTraceStartIndices(trainingData.size(), batchSize);
+    vector<unsigned> indices =
+        createTraceStartIndices(trainingData.size(), batchSize);
     for (unsigned i = 0; i < traceLength; i++) {
       EMatrix input(dim, batchSize);
       EMatrix output(dim, batchSize);
@@ -95,7 +102,8 @@ struct RNNTrainer::RNNTrainerImpl {
     return result;
   }
 
-  vector<unsigned> createTraceStartIndices(unsigned dataLength, unsigned batchSize) {
+  vector<unsigned> createTraceStartIndices(unsigned dataLength,
+                                           unsigned batchSize) {
     vector<unsigned> indices;
     for (unsigned i = 0; i < batchSize; i++) {
       indices.push_back(rand() % (dataLength - traceLength - 1));
@@ -113,31 +121,31 @@ struct RNNTrainer::RNNTrainerImpl {
     spec.nodeActivationRate = 0.7f;
 
     // Connect layer 1 to the input.
-    LayerConnection lc_input_1(0, 1, 0);
+    spec.connections.emplace_back(0, 1, 0);
 
     // Connection layer 1 to layer 2, layer 2 to the output layer.
-    LayerConnection lc_1_2(1, 2, 0);
-    LayerConnection lc_2_output(2, 3, 0);
+    spec.connections.emplace_back(1, 2, 0);
+    spec.connections.emplace_back(2, 3, 0);
 
     // Recurrent self-connections for layers 1 and 2.
-    LayerConnection lc_r_11(1, 1, -1);
-    LayerConnection lc_r_22(2, 2, -1);
+    spec.connections.emplace_back(1, 1, -1);
+    spec.connections.emplace_back(2, 2, -1);
 
-    // LayerConnection lc_r_12(1, 2, -1);
-    // LayerConnection lc_r_21(2, 1, -1);
-
-    spec.layers.emplace_back(1, 128, false, vector<LayerConnection>{lc_input_1, lc_r_11});
-    spec.layers.emplace_back(2, 128, false, vector<LayerConnection>{lc_1_2, lc_r_22});
-    spec.layers.emplace_back(3, outputSize, true, vector<LayerConnection>{lc_2_output});
+    // 3 layers, 2 hidden.
+    spec.layers.emplace_back(1, 128, false);
+    spec.layers.emplace_back(2, 128, false);
+    spec.layers.emplace_back(3, outputSize, true);
 
     return make_unique<RNN>(spec);
   }
 };
 
-RNNTrainer::RNNTrainer(unsigned traceLength) : impl(new RNNTrainerImpl(traceLength)) {}
+RNNTrainer::RNNTrainer(unsigned traceLength)
+    : impl(new RNNTrainerImpl(traceLength)) {}
 
 RNNTrainer::~RNNTrainer() = default;
 
-uptr<RNN> RNNTrainer::TrainLanguageNetwork(CharacterStream &cStream, unsigned iters) {
+uptr<RNN> RNNTrainer::TrainLanguageNetwork(CharacterStream &cStream,
+                                           unsigned iters) {
   return impl->TrainLanguageNetwork(cStream, iters);
 }

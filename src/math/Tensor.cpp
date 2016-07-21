@@ -89,3 +89,17 @@ Tensor &Tensor::operator/=(float s) {
   for_each(data, [=](EMatrix &m) { m *= inv; });
   return *this;
 }
+
+double Tensor::L2Magnitude(void) const {
+  double sum2 = 0.0f;
+
+  for (unsigned i = 0; i < NumLayers(); i++) {
+    for (int r = 0; r < data[i].rows(); r++) {
+      for (int c = 0; c < data[i].cols(); c++) {
+        sum2 += data[i](r, c) * data[i](r, c);
+      }
+    }
+  }
+
+  return sum2;
+}

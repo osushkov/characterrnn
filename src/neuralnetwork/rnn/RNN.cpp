@@ -2,6 +2,8 @@
 #include "RNN.hpp"
 #include "../../common/Maybe.hpp"
 #include "../Activations.hpp"
+#include "DeltaAccum.hpp"
+#include "GradientAccum.hpp"
 #include "Layer.hpp"
 #include "LayerMemory.hpp"
 #include <cassert>
@@ -10,46 +12,10 @@
 using namespace neuralnetwork;
 using namespace neuralnetwork::rnn;
 
-struct ConnectionAccum {
-  EMatrix accumWeightsDelta;
-  unsigned samples;
-
-  ConnectionAccum(const EMatrix &delta) : accumWeightsDelta(delta), samples(1) {}
-
-  EMatrix GetWeightsDelta(void) const {
-    assert(samples > 0);
-    return accumWeightsDelta * (1.0f / samples);
-  }
-
-  void AccumDelta(const EMatrix &delta) {
-    accumWeightsDelta += delta;
-    samples++;
-  }
-};
-
-struct NetworkWeightsAccum {
-  vector<pair<LayerConnection, ConnectionAccum>> allWeightsAccum;
-
-  void IncrementWeights(const LayerConnection &connection, const EMatrix &weightsDelta) {
-    for (auto &wa : allWeightsAccum) {
-      if (wa.first == connection) {
-        wa.second.AccumDelta(weightsDelta);
-        return;
-      }
-    }
-
-    allWeightsAccum.emplace_back(connection, ConnectionAccum(weightsDelta));
-  }
-
-  Maybe<EMatrix> GetAccumDelta(const LayerConnection &connection) {
-    for (auto &wa : allWeightsAccum) {
-      if (wa.first == connection) {
-        return Maybe<EMatrix>(wa.second.GetWeightsDelta());
-      }
-    }
-
-    return Maybe<EMatrix>::none;
-  }
+struct BackpropContext {
+  LayerMemory memory;
+  DeltaAccum deltaAccum;
+  GradientAccum gradientAccum;
 };
 
 struct RNN::RNNImpl {
@@ -57,7 +23,10 @@ struct RNN::RNNImpl {
   vector<Layer> layers;
   Maybe<TimeSlice> previous;
 
-  RNNImpl(const RNNSpec &spec) : spec(spec), previous(Maybe<TimeSlice>::none) {
+  float softmaxTemperature;
+
+  RNNImpl(const RNNSpec &spec)
+      : spec(spec), previous(Maybe<TimeSlice>::none), softmaxTemperature(1.0f) {
     for (const auto &ls : spec.layers) {
       layers.emplace_back(spec, ls);
     }
@@ -68,19 +37,23 @@ struct RNN::RNNImpl {
 
   void ClearMemory(void) { previous = Maybe<TimeSlice>::none; }
 
-  EMatrix Process(const EMatrix &input) {
+  EMatrix Process(const EMatrix &input, float softmaxTemperature) {
     assert(input.rows() == spec.numInputs);
+
+    this->softmaxTemperature = softmaxTemperature;
 
     TimeSlice *prevSlice = previous.valid() ? &(previous.val()) : nullptr;
     TimeSlice curSlice(0, input, layers);
 
-    EMatrix output = forwardPass(input, prevSlice, curSlice, false);
+    EMatrix output = forwardPass(input, prevSlice, curSlice);
     previous = Maybe<TimeSlice>(curSlice);
     return output;
   }
 
   math::Tensor ComputeGradient(const vector<SliceBatch> &trace) {
-    LayerMemory memory;
+    assert(trace.size() > 0);
+
+    BackpropContext bpContext;
 
     vector<EMatrix> traceOutputs;
     traceOutputs.reserve(trace.size());
@@ -90,28 +63,29 @@ struct RNN::RNNImpl {
     for (unsigned i = 0; i < trace.size(); i++) {
       TimeSlice curSlice(i, trace[i].batchInput, layers);
 
-      EMatrix out = forwardPass(trace[i].batchInput, prevSlice, curSlice, true);
+      EMatrix out = forwardPass(trace[i].batchInput, prevSlice, curSlice);
       traceOutputs.push_back(out);
 
-      prevSlice = memory.PushNewSlice(curSlice);
+      prevSlice = bpContext.memory.PushNewSlice(curSlice);
     }
 
     assert(trace.size() == traceOutputs.size());
 
     // Backward pass
-    NetworkWeightsAccum weightsAccum;
-    for (unsigned i = 0; i < trace.size(); i++) {
-      backprop(trace[i], static_cast<int>(i), memory, weightsAccum);
+    for (int i = (trace.size() - 1); i >= 0; i--) {
+      backprop(trace[i], i, bpContext);
     }
 
     // Compile the accumulated weight deltas into a gradient tensor.
+    float batchScale = 1.0f / static_cast<float>(trace.front().batchInput.cols());
+
     math::Tensor result;
     for (auto &layer : layers) {
       for (auto &weight : layer.weights) {
-        Maybe<EMatrix> aw = weightsAccum.GetAccumDelta(weight.first);
+        Maybe<EMatrix> aw = bpContext.gradientAccum.GetGradient(weight.first);
         assert(aw.valid()); // During normal training we expect every connection to be updated.
 
-        result.AddLayer(aw.val());
+        result.AddLayer(aw.val() * batchScale);
       }
     }
 
@@ -127,41 +101,43 @@ struct RNN::RNNImpl {
     }
   }
 
-  void backprop(const SliceBatch &sliceBatch, int timestamp, const LayerMemory &memory,
-                NetworkWeightsAccum &weightsAccum) {
-    const TimeSlice *networkSlice = memory.GetTimeSlice(timestamp);
+  void backprop(const SliceBatch &sliceBatch, int timestamp, BackpropContext &bpContext) {
+    const TimeSlice *networkSlice = bpContext.memory.GetTimeSlice(timestamp);
     assert(networkSlice != nullptr);
 
     const LayerMemoryData *outputMemory = networkSlice->GetLayerData(layers.back().layerId);
     assert(outputMemory != nullptr);
+    assert(outputMemory->haveOutput);
 
     EMatrix outputDelta = outputMemory->output - sliceBatch.batchOutput;
-    recursiveBackprop(layers.back(), timestamp, outputDelta, memory, weightsAccum);
+    bpContext.deltaAccum.IncrementDelta(layers.back().layerId, timestamp, outputDelta);
+
+    recursiveBackprop(layers.back(), timestamp, outputDelta, bpContext);
   }
 
   void recursiveBackprop(const Layer &layer, int timestamp, const EMatrix &delta,
-                         const LayerMemory &memory, NetworkWeightsAccum &weightsAccum) {
+                         BackpropContext &bpContext) {
 
     for (const auto &connection : layer.weights) {
-      int nextTimestamp = timestamp + connection.first.timeOffset;
-      const TimeSlice *srcSlice = memory.GetTimeSlice(nextTimestamp);
+      int srcTimestamp = timestamp - connection.first.timeOffset;
+      const TimeSlice *srcSlice = bpContext.memory.GetTimeSlice(srcTimestamp);
       if (srcSlice == nullptr) {
         continue;
       }
 
-      int batchSize = srcSlice->networkInput.cols();
       if (connection.first.srcLayerId == 0) { // The source is the input.
         EMatrix inputT = getInputWithBias(srcSlice->networkInput).transpose();
-        weightsAccum.IncrementWeights(connection.first, delta * inputT * (1.0f / batchSize));
+        bpContext.gradientAccum.IncrementWeights(connection.first, delta * inputT);
       } else { // The source is another layer from the srcSlice.
         const Layer &srcLayer = findLayer(connection.first.srcLayerId);
-        const LayerMemoryData *lmd = srcSlice->GetLayerData(connection.first.srcLayerId);
+        const LayerMemoryData *lmd = srcSlice->GetLayerData(srcLayer.layerId);
         assert(lmd != nullptr && lmd->haveOutput);
 
+        // Accumulate the gradient for the connection weight.
         EMatrix inputT = getInputWithBias(lmd->output).transpose();
-        weightsAccum.IncrementWeights(connection.first, delta * inputT * (1.0f / batchSize));
+        bpContext.gradientAccum.IncrementWeights(connection.first, delta * inputT);
 
-        // Now compute the delta for the src layer.
+        // Now increment the delta for the src layer.
         int nRows = connection.second.rows();
         int nCols = connection.second.cols() - 1;
         EMatrix noBiasWeights = connection.second.bottomLeftCorner(nRows, nCols);
@@ -169,7 +145,12 @@ struct RNN::RNNImpl {
         assert(srcLayer.numNodes == srcDelta.rows());
 
         componentScale(srcDelta, lmd->derivative);
-        recursiveBackprop(srcLayer, nextTimestamp, srcDelta, memory, weightsAccum);
+        LayerAccum &deltaAccum =
+            bpContext.deltaAccum.IncrementDelta(srcLayer.layerId, srcTimestamp, srcDelta);
+
+        if (connection.first.timeOffset == 0) {
+          recursiveBackprop(srcLayer, srcTimestamp, deltaAccum.GetDelta(), bpContext);
+        }
       }
     }
   }
@@ -196,12 +177,10 @@ struct RNN::RNNImpl {
     return layers.back();
   }
 
-  EMatrix forwardPass(const EMatrix &input, const TimeSlice *prevSlice, TimeSlice &curSlice,
-                      bool doDropout) {
+  EMatrix forwardPass(const EMatrix &input, const TimeSlice *prevSlice, TimeSlice &curSlice) {
     EMatrix output;
     for (const auto &layer : layers) {
-      pair<EMatrix, EMatrix> layerOut =
-          getLayerOutput(layer, prevSlice, curSlice, input, doDropout);
+      pair<EMatrix, EMatrix> layerOut = getLayerOutput(layer, prevSlice, curSlice, input);
 
       LayerMemoryData *lmd = curSlice.GetLayerData(layer.layerId);
       assert(lmd != nullptr);
@@ -222,14 +201,12 @@ struct RNN::RNNImpl {
 
   // Returns the output vector of the layer, and the derivative vector for the layer.
   pair<EMatrix, EMatrix> getLayerOutput(const Layer &layer, const TimeSlice *prevSlice,
-                                        const TimeSlice &curSlice, const EMatrix &networkInput,
-                                        bool doDropout) {
+                                        const TimeSlice &curSlice, const EMatrix &networkInput) {
     EMatrix incoming(layer.numNodes, networkInput.cols());
     incoming.fill(0.0f);
 
     for (const auto &connection : layer.weights) {
-      incrementIncomingWithConnection(connection, prevSlice, curSlice, networkInput, incoming,
-                                      doDropout);
+      incrementIncomingWithConnection(connection, prevSlice, curSlice, networkInput, incoming);
     }
 
     return performLayerActivations(layer, incoming);
@@ -237,8 +214,7 @@ struct RNN::RNNImpl {
 
   void incrementIncomingWithConnection(const pair<LayerConnection, EMatrix> &connection,
                                        const TimeSlice *prevSlice, const TimeSlice &curSlice,
-                                       const EMatrix &networkInput, EMatrix &incoming,
-                                       bool doDropout) {
+                                       const EMatrix &networkInput, EMatrix &incoming) {
 
     if (connection.first.srcLayerId == 0) { // special case for input
       assert(connection.first.timeOffset == 0);
@@ -256,26 +232,8 @@ struct RNN::RNNImpl {
 
       if (layerMemory != nullptr) {
         assert(layerMemory->haveOutput);
-
-        EMatrix input = applyDropout(layerMemory->output, connection.first.timeOffset, doDropout);
-        incoming += connection.second * getInputWithBias(input);
+        incoming += connection.second * getInputWithBias(layerMemory->output);
       }
-    }
-  }
-
-  EMatrix applyDropout(const EMatrix &original, int timeOffset, bool doDropout) {
-    if (timeOffset == -1) {
-      return original;
-    } else if (!doDropout) {
-      return original * spec.nodeActivationRate;
-    } else {
-      EMatrix result(original.rows(), original.cols());
-      for (int c = 0; c < result.cols(); c++) {
-        for (int r = 0; r < result.rows(); r++) {
-          result(r, c) = math::UnitRand() < spec.nodeActivationRate ? original(r, c) : 0.0f;
-        }
-      }
-      return result;
     }
   }
 
@@ -285,7 +243,7 @@ struct RNN::RNNImpl {
 
     if (layer.isOutput && spec.outputActivation == LayerActivation::SOFTMAX) {
       for (int c = 0; c < activation.cols(); c++) {
-        activation.col(c) = math::SoftmaxActivations(incoming.col(c));
+        activation.col(c) = math::SoftmaxActivations(incoming.col(c) / softmaxTemperature);
       }
     } else {
       for (int c = 0; c < activation.cols(); c++) {
@@ -319,7 +277,9 @@ RNN &RNN::operator=(const RNN &other) {
 }
 
 void RNN::ClearMemory(void) { impl->ClearMemory(); }
-EMatrix RNN::Process(const EMatrix &input) { return impl->Process(input); }
+EMatrix RNN::Process(const EMatrix &input, float softmaxTemperature) {
+  return impl->Process(input, softmaxTemperature);
+}
 
 math::Tensor RNN::ComputeGradient(const vector<SliceBatch> &trace) {
   return impl->ComputeGradient(trace);

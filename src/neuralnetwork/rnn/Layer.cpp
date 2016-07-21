@@ -32,7 +32,8 @@ static EMatrix createWeightsMatrix(unsigned inputSize, unsigned outputSize) {
     for (unsigned c = 0; c < result.cols(); c++) {
       // TODO: consider replacing this with a Gaussian with std-dev of
       // initRange.
-      result(r, c) = math::RandInterval(-initRange, initRange);
+      result(r, c) = math::GaussianSample(0.0, initRange);
+      // result(r, c) = math::RandInterval(-initRange, initRange);
     }
   }
 
@@ -41,10 +42,8 @@ static EMatrix createWeightsMatrix(unsigned inputSize, unsigned outputSize) {
 
 Layer::Layer(const RNNSpec &nnSpec, const LayerSpec &layerSpec)
     : layerId(layerSpec.uid),
-      activation(layerSpec.isOutput ? nnSpec.outputActivation
-                                    : nnSpec.hiddenActivation),
-      numNodes(layerSpec.numNodes), isOutput(layerSpec.isOutput),
-      numOutgoingConnections(0) {
+      activation(layerSpec.isOutput ? nnSpec.outputActivation : nnSpec.hiddenActivation),
+      numNodes(layerSpec.numNodes), isOutput(layerSpec.isOutput) {
 
   assert(layerSpec.uid != 0); // 0 is reserved for the input.
   if (isOutput) {
@@ -52,15 +51,14 @@ Layer::Layer(const RNNSpec &nnSpec, const LayerSpec &layerSpec)
   }
 
   for (const auto &lc : nnSpec.connections) {
-    assert(lc.timeOffset == 0 || lc.timeOffset == -1);
+    assert(lc.timeOffset == 0 || lc.timeOffset == 1);
+    assert(lc.dstLayerId != 0);
 
     if (lc.dstLayerId == layerId) {
       // +1 accounts for the bias.
       unsigned inputSize = numLayerOutputs(nnSpec, lc.srcLayerId) + 1;
       EMatrix weightsMatrix = createWeightsMatrix(inputSize, numNodes);
       weights.emplace_back(lc, weightsMatrix);
-    } else if (lc.srcLayerId == layerId) {
-      numOutgoingConnections++;
     }
   }
 }

@@ -27,7 +27,7 @@ public:
   RNN &operator=(const RNN &other);
 
   void ClearMemory(void);
-  EMatrix Process(const EMatrix &input);
+  EMatrix Process(const EMatrix &input, float softmaxTemperature);
 
   math::Tensor ComputeGradient(const vector<SliceBatch> &trace);
   void UpdateWeights(const math::Tensor &weightsDelta);

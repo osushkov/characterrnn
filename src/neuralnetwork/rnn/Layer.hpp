@@ -18,7 +18,6 @@ struct Layer {
 
   // Weights for incoming connections from other layers.
   vector<pair<LayerConnection, EMatrix>> weights;
-  unsigned numOutgoingConnections;
 
   Layer(const RNNSpec &nnSpec, const LayerSpec &layerSpec);
 };

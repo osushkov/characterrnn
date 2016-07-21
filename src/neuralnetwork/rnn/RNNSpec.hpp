@@ -13,16 +13,15 @@ struct LayerConnection {
   unsigned srcLayerId;
   unsigned dstLayerId;
 
-  int timeOffset; // should be <= 0
+  int timeOffset; // should be 0 or 1
 
   LayerConnection(unsigned srcLayerId, unsigned dstLayerId, int timeOffset)
       : srcLayerId(srcLayerId), dstLayerId(dstLayerId), timeOffset(timeOffset) {
-    assert(timeOffset == 0 || timeOffset == -1);
+    assert(timeOffset == 0 || timeOffset == 1);
   }
 
   bool operator==(const LayerConnection &other) {
-    return this->srcLayerId == other.srcLayerId &&
-           this->dstLayerId == other.dstLayerId &&
+    return this->srcLayerId == other.srcLayerId && this->dstLayerId == other.dstLayerId &&
            this->timeOffset == other.timeOffset;
   }
 };

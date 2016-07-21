@@ -29,7 +29,7 @@ struct RNNSampler::RNNSamplerImpl {
       input(prevChars.back()) = 1.0f;
     }
 
-    EVector pChar = network.Process(input);
+    EVector pChar = network.Process(input, 0.7);
     float r = math::UnitRand();
 
     for (int i = 0; i < pChar.rows(); i++) {

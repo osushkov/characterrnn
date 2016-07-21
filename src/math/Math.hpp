@@ -7,7 +7,11 @@
 #include <cstdlib>
 
 typedef Eigen::VectorXf EVector;
-typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> EMatrix;
+
+// TODO: row major is required for cuda (the way Ive implemented it), but is slower for cpu
+// computation.
+// typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> EMatrix;
+typedef Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic> EMatrix;
 
 namespace math {
 

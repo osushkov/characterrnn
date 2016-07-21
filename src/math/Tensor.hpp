@@ -25,6 +25,8 @@ public:
   Tensor &operator*=(float s);
   Tensor &operator/=(float s);
 
+  double L2Magnitude(void) const;
+
 private:
   vector<EMatrix> data;
 };

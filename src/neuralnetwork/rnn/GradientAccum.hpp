@@ -50,6 +50,14 @@ struct GradientAccum {
 
     return Maybe<EMatrix>::none;
   }
+
+  void DebugPrint(void) {
+    cout << "num gradients accumulated: " << allWeightsAccum.size() << endl;
+    for (const auto &wa : allWeightsAccum) {
+      cout << "acc: " << wa.first.srcLayerId << " -> " << wa.first.dstLayerId <<
+      " = " << wa.second.samples << endl;
+    }
+  }
 };
 }
 }

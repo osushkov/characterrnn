@@ -18,7 +18,7 @@ using namespace neuralnetwork;
 using namespace neuralnetwork::rnn;
 
 static constexpr unsigned TRAINING_SIZE = 10 * 1000;
-static constexpr unsigned BATCH_SIZE = 32;
+static constexpr unsigned BATCH_SIZE = 1;
 
 struct RNNTrainer::RNNTrainerImpl {
   unsigned traceLength;
@@ -37,6 +37,7 @@ struct RNNTrainer::RNNTrainerImpl {
         cout << i << "/" << iters << endl;
       }
 
+/*
       mutex gradientMutex;
       vector<math::Tensor> gradients;
 
@@ -62,6 +63,12 @@ struct RNNTrainer::RNNTrainerImpl {
       }
       gradient *= 1.0f / gradients.size();
       // cout << "magnitude: " << gradient.L2Magnitude() << endl;
+*/
+
+      vector<SliceBatch> batch = this->makeBatch(letters, BATCH_SIZE);
+      // printSliceBatch(batch, cStream);
+      math::Tensor gradient = network->ComputeGradient(batch);
+      // cout << "gradient l2: " << gradient.L2Magnitude() << endl;
 
       gradient = gradientPolicy.UpdateGradient(gradient);
       network->UpdateWeights(gradient);
@@ -98,10 +105,33 @@ struct RNNTrainer::RNNTrainerImpl {
     return result;
   }
 
+  void printSliceBatch(const vector<SliceBatch> &sliceBatch, CharacterStream &cStream) {
+    for (const auto &sb : sliceBatch) {
+      for (unsigned i = 0; i < sb.batchInput.cols(); i++) {
+        cout << cStream.Decode(indexFromCol(sb.batchInput.col(i))) << "  ";
+      }
+      cout << endl;
+    }
+    cout << "***" << endl;
+  }
+
+  unsigned indexFromCol(const EMatrix &col) {
+    assert(col.cols() == 1);
+
+    for (unsigned i = 0; i < col.rows(); i++) {
+      if (col(i, 0) > 0.5f) {
+        return i;
+      }
+    }
+
+    assert(false);
+    return 0;
+  }
+
   vector<unsigned> createTraceStartIndices(unsigned dataLength, unsigned batchSize) {
     vector<unsigned> indices;
     for (unsigned i = 0; i < batchSize; i++) {
-      indices.push_back(rand() % (dataLength - traceLength - 1));
+      indices.push_back(rand() % (dataLength - traceLength));
     }
     return indices;
   }
@@ -111,7 +141,7 @@ struct RNNTrainer::RNNTrainerImpl {
 
     spec.numInputs = inputSize;
     spec.numOutputs = outputSize;
-    spec.hiddenActivation = LayerActivation::TANH;
+    spec.hiddenActivation = LayerActivation::TANH ;
     spec.outputActivation = LayerActivation::SOFTMAX;
     spec.nodeActivationRate = 1.0f;
 
@@ -126,9 +156,9 @@ struct RNNTrainer::RNNTrainerImpl {
     spec.connections.emplace_back(1, 1, 1);
     spec.connections.emplace_back(2, 2, 1);
 
-    // 3 layers, 2 hidden.
-    spec.layers.emplace_back(1, 128, false);
-    spec.layers.emplace_back(2, 128, false);
+    // 2 layers, 1 hidden.
+    spec.layers.emplace_back(1, 64, false);
+    spec.layers.emplace_back(2, 64, false);
     spec.layers.emplace_back(3, outputSize, true);
 
     return make_unique<RNN>(spec);

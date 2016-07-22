@@ -73,9 +73,6 @@ struct CharacterStream::CharacterStreamImpl {
     for (char c = 'a'; c <= 'z'; c++) {
       mappedChars.push_back(c);
     }
-    for (char c = 'A'; c <= 'Z'; c++) {
-      mappedChars.push_back(c);
-    }
     for (char c = '0'; c <= '9'; c++) {
       mappedChars.push_back(c);
     }
@@ -85,7 +82,7 @@ struct CharacterStream::CharacterStreamImpl {
     if (isspace(curChar)) {
       return ' ';
     } else {
-      return curChar;
+      return tolower(curChar);
     }
   }
 };

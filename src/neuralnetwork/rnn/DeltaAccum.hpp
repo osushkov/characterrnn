@@ -62,6 +62,13 @@ struct DeltaAccum {
     assert(false);
     return allDeltaAccum.front();
   }
+
+  void DebugPrint(void) {
+    cout << "num deltas accumulated: " << allDeltaAccum.size() << endl;
+    for (const auto &wa : allDeltaAccum) {
+      cout << "acc: " << wa.layerId << " , " << wa.timestamp << " = " << wa.samples << endl;
+    }
+  }
 };
 }
 }

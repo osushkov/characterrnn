@@ -27,18 +27,22 @@ struct RNN::RNNImpl {
 
   RNNImpl(const RNNSpec &spec)
       : spec(spec), previous(Maybe<TimeSlice>::none), softmaxTemperature(1.0f) {
+        cout << "spec ctor" << endl;
     for (const auto &ls : spec.layers) {
       layers.emplace_back(spec, ls);
     }
   }
 
   RNNImpl(const RNNImpl &other)
-      : spec(other.spec), layers(other.layers), previous(other.previous) {}
+      : spec(other.spec), layers(other.layers), previous(other.previous) {
+        cout << "move ctor" << endl;
+      }
 
   void ClearMemory(void) { previous = Maybe<TimeSlice>::none; }
 
   EMatrix Process(const EMatrix &input, float softmaxTemperature) {
     assert(input.rows() == spec.numInputs);
+    assert(input.cols() > 0);
 
     this->softmaxTemperature = softmaxTemperature;
 
@@ -52,6 +56,13 @@ struct RNN::RNNImpl {
 
   math::Tensor ComputeGradient(const vector<SliceBatch> &trace) {
     assert(trace.size() > 0);
+    assert(trace.front().batchInput.cols() > 0);
+
+    // for (unsigned i = 0; i < trace.size(); i++) {
+    //   cout << i << " : " << endl;
+    //   cout << trace[i].batchInput.transpose() << endl;
+    //   cout << trace[i].batchOutput.transpose() << endl << endl;
+    // }
 
     BackpropContext bpContext;
 
@@ -72,8 +83,9 @@ struct RNN::RNNImpl {
     assert(trace.size() == traceOutputs.size());
 
     // Backward pass
+    float totalLoss = 0.0f;
     for (int i = (trace.size() - 1); i >= 0; i--) {
-      backprop(trace[i], i, bpContext);
+      totalLoss += backprop(trace[i], i, bpContext);
     }
 
     // Compile the accumulated weight deltas into a gradient tensor.
@@ -89,6 +101,18 @@ struct RNN::RNNImpl {
       }
     }
 
+    // bpContext.deltaAccum.DebugPrint();
+    // bpContext.gradientAccum.DebugPrint();
+    // exit(1);
+    float gradientM = sqrtf(result.L2Magnitude());
+    // if (rand() % 10 == 0) {
+    //   cout << "loss: " << totalLoss << "\t" << gradientM << endl;
+    // }
+
+    // if (gradientM > 0.1f) {
+    //   result *= 0.1f / gradientM;
+    // }
+
     return result;
   }
 
@@ -101,7 +125,7 @@ struct RNN::RNNImpl {
     }
   }
 
-  void backprop(const SliceBatch &sliceBatch, int timestamp, BackpropContext &bpContext) {
+  float backprop(const SliceBatch &sliceBatch, int timestamp, BackpropContext &bpContext) {
     const TimeSlice *networkSlice = bpContext.memory.GetTimeSlice(timestamp);
     assert(networkSlice != nullptr);
 
@@ -113,6 +137,14 @@ struct RNN::RNNImpl {
     bpContext.deltaAccum.IncrementDelta(layers.back().layerId, timestamp, outputDelta);
 
     recursiveBackprop(layers.back(), timestamp, outputDelta, bpContext);
+
+    float loss = 0.0f;
+    for (int r = 0; r < outputDelta.rows(); r++) {
+      for (int c = 0; c < outputDelta.cols(); c++) {
+        loss += outputDelta(r, c) * outputDelta(r, c);
+      }
+    }
+    return loss;
   }
 
   void recursiveBackprop(const Layer &layer, int timestamp, const EMatrix &delta,
@@ -120,6 +152,9 @@ struct RNN::RNNImpl {
 
     for (const auto &connection : layer.weights) {
       int srcTimestamp = timestamp - connection.first.timeOffset;
+      // cout << "recursive backprop: " << layer.layerId << " (" << timestamp << ") -> " <<
+      // connection.first.srcLayerId << " (" << srcTimestamp << ")" << endl;
+
       const TimeSlice *srcSlice = bpContext.memory.GetTimeSlice(srcTimestamp);
       if (srcSlice == nullptr) {
         continue;
@@ -128,6 +163,8 @@ struct RNN::RNNImpl {
       if (connection.first.srcLayerId == 0) { // The source is the input.
         EMatrix inputT = getInputWithBias(srcSlice->networkInput).transpose();
         bpContext.gradientAccum.IncrementWeights(connection.first, delta * inputT);
+        // cout << "increment weight: " << connection.first.srcLayerId << "-"
+        // << connection.first.dstLayerId << endl;
       } else { // The source is another layer from the srcSlice.
         const Layer &srcLayer = findLayer(connection.first.srcLayerId);
         const LayerMemoryData *lmd = srcSlice->GetLayerData(srcLayer.layerId);
@@ -136,6 +173,8 @@ struct RNN::RNNImpl {
         // Accumulate the gradient for the connection weight.
         EMatrix inputT = getInputWithBias(lmd->output).transpose();
         bpContext.gradientAccum.IncrementWeights(connection.first, delta * inputT);
+        // cout << "increment weight: " << connection.first.srcLayerId << "-"
+        // << connection.first.dstLayerId << endl;
 
         // Now increment the delta for the src layer.
         int nRows = connection.second.rows();

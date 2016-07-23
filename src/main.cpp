@@ -2,9 +2,11 @@
 #include "CharacterStream.hpp"
 #include "FFNetworkSampler.hpp"
 #include "FFNetworkTrainer.hpp"
+#include "RNNBeamSampler.hpp"
 #include "RNNSampler.hpp"
 #include "RNNTrainer.hpp"
 #include "common/Common.hpp"
+#include "common/Maybe.hpp"
 #include "neuralnetwork/rnn/RNN.hpp"
 
 static constexpr unsigned NGRAM_SIZE = 4;
@@ -28,11 +30,12 @@ void testFFNetwork(string path) {
 void testRNN(string path) {
   CharacterStream cstream(path);
 
-  RNNTrainer trainer(8);
+  RNNTrainer trainer(16);
   auto network = trainer.TrainLanguageNetwork(cstream, 100000);
 
   RNNSampler sampler(cstream.VectorDimension());
-  vector<unsigned> sampled = sampler.SampleCharacters(network.get(), 100);
+  // RNNBeamSampler sampler(cstream.VectorDimension());
+  vector<unsigned> sampled = sampler.SampleCharacters(network.get(), 1000);
 
   for (const auto sample : sampled) {
     cout << cstream.Decode(sample);

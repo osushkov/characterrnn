@@ -17,8 +17,8 @@
 using namespace neuralnetwork;
 using namespace neuralnetwork::rnn;
 
-static constexpr unsigned TRAINING_SIZE = 10 * 1000;
-static constexpr unsigned BATCH_SIZE = 1;
+static constexpr unsigned TRAINING_SIZE = 10 * 1000 * 1000;
+static constexpr unsigned BATCH_SIZE = 8;
 
 struct RNNTrainer::RNNTrainerImpl {
   unsigned traceLength;
@@ -33,11 +33,10 @@ struct RNNTrainer::RNNTrainerImpl {
 
     vector<math::OneHotVector> letters = cStream.ReadCharacters(TRAINING_SIZE);
     for (unsigned i = 0; i < iters; i++) {
-      if (i % 100 == 0) {
+      if (i % 1000 == 0) {
         cout << i << "/" << iters << endl;
       }
 
-/*
       mutex gradientMutex;
       vector<math::Tensor> gradients;
 
@@ -63,12 +62,10 @@ struct RNNTrainer::RNNTrainerImpl {
       }
       gradient *= 1.0f / gradients.size();
       // cout << "magnitude: " << gradient.L2Magnitude() << endl;
-*/
-
+      /*
       vector<SliceBatch> batch = this->makeBatch(letters, BATCH_SIZE);
-      // printSliceBatch(batch, cStream);
       math::Tensor gradient = network->ComputeGradient(batch);
-      // cout << "gradient l2: " << gradient.L2Magnitude() << endl;
+      */
 
       gradient = gradientPolicy.UpdateGradient(gradient);
       network->UpdateWeights(gradient);
@@ -141,7 +138,7 @@ struct RNNTrainer::RNNTrainerImpl {
 
     spec.numInputs = inputSize;
     spec.numOutputs = outputSize;
-    spec.hiddenActivation = LayerActivation::TANH ;
+    spec.hiddenActivation = LayerActivation::ELU;
     spec.outputActivation = LayerActivation::SOFTMAX;
     spec.nodeActivationRate = 1.0f;
 
@@ -155,10 +152,12 @@ struct RNNTrainer::RNNTrainerImpl {
     // Recurrent self-connections for layers 1 and 2.
     spec.connections.emplace_back(1, 1, 1);
     spec.connections.emplace_back(2, 2, 1);
+    spec.connections.emplace_back(2, 1, 1);
+    spec.connections.emplace_back(1, 2, 1);
 
     // 2 layers, 1 hidden.
-    spec.layers.emplace_back(1, 64, false);
-    spec.layers.emplace_back(2, 64, false);
+    spec.layers.emplace_back(1, 128, false);
+    spec.layers.emplace_back(2, 128, false);
     spec.layers.emplace_back(3, outputSize, true);
 
     return make_unique<RNN>(spec);

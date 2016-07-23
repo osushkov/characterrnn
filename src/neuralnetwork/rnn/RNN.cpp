@@ -27,16 +27,13 @@ struct RNN::RNNImpl {
 
   RNNImpl(const RNNSpec &spec)
       : spec(spec), previous(Maybe<TimeSlice>::none), softmaxTemperature(1.0f) {
-        cout << "spec ctor" << endl;
     for (const auto &ls : spec.layers) {
       layers.emplace_back(spec, ls);
     }
   }
 
   RNNImpl(const RNNImpl &other)
-      : spec(other.spec), layers(other.layers), previous(other.previous) {
-        cout << "move ctor" << endl;
-      }
+      : spec(other.spec), layers(other.layers), previous(other.previous) {}
 
   void ClearMemory(void) { previous = Maybe<TimeSlice>::none; }
 
@@ -57,12 +54,6 @@ struct RNN::RNNImpl {
   math::Tensor ComputeGradient(const vector<SliceBatch> &trace) {
     assert(trace.size() > 0);
     assert(trace.front().batchInput.cols() > 0);
-
-    // for (unsigned i = 0; i < trace.size(); i++) {
-    //   cout << i << " : " << endl;
-    //   cout << trace[i].batchInput.transpose() << endl;
-    //   cout << trace[i].batchOutput.transpose() << endl << endl;
-    // }
 
     BackpropContext bpContext;
 
@@ -100,18 +91,6 @@ struct RNN::RNNImpl {
         result.AddLayer(aw.val() * batchScale);
       }
     }
-
-    // bpContext.deltaAccum.DebugPrint();
-    // bpContext.gradientAccum.DebugPrint();
-    // exit(1);
-    float gradientM = sqrtf(result.L2Magnitude());
-    // if (rand() % 10 == 0) {
-    //   cout << "loss: " << totalLoss << "\t" << gradientM << endl;
-    // }
-
-    // if (gradientM > 0.1f) {
-    //   result *= 0.1f / gradientM;
-    // }
 
     return result;
   }

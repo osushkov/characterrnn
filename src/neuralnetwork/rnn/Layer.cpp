@@ -30,8 +30,6 @@ static EMatrix createWeightsMatrix(unsigned inputSize, unsigned outputSize) {
 
   for (unsigned r = 0; r < result.rows(); r++) {
     for (unsigned c = 0; c < result.cols(); c++) {
-      // TODO: consider replacing this with a Gaussian with std-dev of
-      // initRange.
       result(r, c) = math::GaussianSample(0.0, initRange);
       // result(r, c) = math::RandInterval(-initRange, initRange);
     }

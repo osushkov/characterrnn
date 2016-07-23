@@ -10,8 +10,6 @@ struct RNNSampler::RNNSamplerImpl {
     vector<unsigned> result;
     result.reserve(numChars);
 
-    result.push_back(25);
-
     network->ClearMemory();
     for (unsigned i = 0; i < numChars; i++) {
       unsigned sample = sampleChar(network, result);
@@ -22,8 +20,6 @@ struct RNNSampler::RNNSamplerImpl {
   }
 
   unsigned sampleChar(neuralnetwork::rnn::RNN *rnn, const vector<unsigned> &prevChars) {
-    // neuralnetwork::rnn::RNN network(*rnn);
-
     EVector input(letterDim);
     input.fill(0.0f);
 

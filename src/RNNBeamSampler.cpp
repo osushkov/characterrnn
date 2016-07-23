@@ -1,9 +1,9 @@
-#include "RNNSampler.hpp"
+#include "RNNBeamSampler.hpp"
 #include <algorithm>
 #include <cassert>
 
-static constexpr unsigned NUM_BEAMS = 1;
-static constexpr unsigned RESAMPLE_RATE = 100000;
+static constexpr unsigned NUM_BEAMS = 100;
+static constexpr unsigned RESAMPLE_RATE = 10;
 static constexpr unsigned RESAMPLE_DROP = 30;
 
 struct SampledBeam {
@@ -24,7 +24,7 @@ struct SampledBeam {
       input(samples.back()) = 1.0f;
     }
 
-    EVector pChar = rnn.Process(input);
+    EVector pChar = rnn.Process(input, 1.0);
     float r = math::UnitRand();
 
     for (int i = 0; i < pChar.rows(); i++) {
@@ -42,10 +42,10 @@ struct SampledBeam {
   }
 };
 
-struct RNNSampler::RNNSamplerImpl {
+struct RNNBeamSampler::RNNBeamSamplerImpl {
   unsigned letterDim;
 
-  RNNSamplerImpl(unsigned letterDim) : letterDim(letterDim) { assert(letterDim > 0); }
+  RNNBeamSamplerImpl(unsigned letterDim) : letterDim(letterDim) { assert(letterDim > 0); }
 
   vector<unsigned> SampleCharacters(neuralnetwork::rnn::RNN *network, unsigned numChars) {
     network->ClearMemory();
@@ -60,29 +60,31 @@ struct RNNSampler::RNNSamplerImpl {
         beam.Sample();
       }
 
-      // if (i % RESAMPLE_RATE == 0) {
-      //   sort(beams.begin(), beams.end(), [](const SampledBeam &a, const SampledBeam &b) {
-      //     return a.logProbabilitySum < b.logProbabilitySum;
-      //   });
-      //
-      //   for (unsigned j = 0; j < RESAMPLE_DROP; j++) {
-      //     beams[j] = beams[RESAMPLE_DROP + (rand() % (NUM_BEAMS - RESAMPLE_DROP))];
-      //   }
-      // }
+      if (i % RESAMPLE_RATE == 0) {
+        sort(beams.begin(), beams.end(), [](const SampledBeam &a, const SampledBeam &b) {
+          return a.logProbabilitySum < b.logProbabilitySum;
+        });
+
+        for (unsigned j = 0; j < RESAMPLE_DROP; j++) {
+          beams[j] = beams[RESAMPLE_DROP + (rand() % (NUM_BEAMS - RESAMPLE_DROP))];
+        }
+      }
     }
 
-    // sort(beams.begin(), beams.end(), [](const SampledBeam &a, const SampledBeam &b) {
-    //   return a.logProbabilitySum < b.logProbabilitySum;
-    // });
+    sort(beams.begin(), beams.end(), [](const SampledBeam &a, const SampledBeam &b) {
+      return a.logProbabilitySum < b.logProbabilitySum;
+    });
 
+    cout << beams.front().logProbabilitySum << " : " << beams.back().logProbabilitySum << endl;
     return beams.back().samples;
   }
 };
 
-RNNSampler::RNNSampler(unsigned letterDim) : impl(new RNNSamplerImpl(letterDim)) {}
+RNNBeamSampler::RNNBeamSampler(unsigned letterDim) : impl(new RNNBeamSamplerImpl(letterDim)) {}
 
-RNNSampler::~RNNSampler() = default;
+RNNBeamSampler::~RNNBeamSampler() = default;
 
-vector<unsigned> RNNSampler::SampleCharacters(neuralnetwork::rnn::RNN *network, unsigned numChars) {
+vector<unsigned> RNNBeamSampler::SampleCharacters(neuralnetwork::rnn::RNN *network,
+                                                  unsigned numChars) {
   return impl->SampleCharacters(network, numChars);
 }

@@ -46,7 +46,7 @@ struct RNN::RNNImpl {
     TimeSlice *prevSlice = previous.valid() ? &(previous.val()) : nullptr;
     TimeSlice curSlice(0, input, layers);
 
-    EMatrix output = forwardPass(input, prevSlice, curSlice);
+    EMatrix output = forwardPass(prevSlice, curSlice, false);
     previous = Maybe<TimeSlice>(curSlice);
     return output;
   }
@@ -57,21 +57,14 @@ struct RNN::RNNImpl {
 
     BackpropContext bpContext;
 
-    vector<EMatrix> traceOutputs;
-    traceOutputs.reserve(trace.size());
-
     // Forward pass
     TimeSlice *prevSlice = nullptr;
     for (unsigned i = 0; i < trace.size(); i++) {
       TimeSlice curSlice(i, trace[i].batchInput, layers);
 
-      EMatrix out = forwardPass(trace[i].batchInput, prevSlice, curSlice);
-      traceOutputs.push_back(out);
-
+      forwardPass(prevSlice, curSlice, true);
       prevSlice = bpContext.memory.PushNewSlice(curSlice);
     }
-
-    assert(trace.size() == traceOutputs.size());
 
     // Backward pass
     float totalLoss = 0.0f;
@@ -108,11 +101,7 @@ struct RNN::RNNImpl {
     const TimeSlice *networkSlice = bpContext.memory.GetTimeSlice(timestamp);
     assert(networkSlice != nullptr);
 
-    const LayerMemoryData *outputMemory = networkSlice->GetLayerData(layers.back().layerId);
-    assert(outputMemory != nullptr);
-    assert(outputMemory->haveOutput);
-
-    EMatrix outputDelta = outputMemory->output - sliceBatch.batchOutput;
+    EMatrix outputDelta = networkSlice->networkOutput - sliceBatch.batchOutput;
     bpContext.deltaAccum.IncrementDelta(layers.back().layerId, timestamp, outputDelta);
 
     recursiveBackprop(layers.back(), timestamp, outputDelta, bpContext);
@@ -131,8 +120,6 @@ struct RNN::RNNImpl {
 
     for (const auto &connection : layer.weights) {
       int srcTimestamp = timestamp - connection.first.timeOffset;
-      // cout << "recursive backprop: " << layer.layerId << " (" << timestamp << ") -> " <<
-      // connection.first.srcLayerId << " (" << srcTimestamp << ")" << endl;
 
       const TimeSlice *srcSlice = bpContext.memory.GetTimeSlice(srcTimestamp);
       if (srcSlice == nullptr) {
@@ -142,18 +129,14 @@ struct RNN::RNNImpl {
       if (connection.first.srcLayerId == 0) { // The source is the input.
         EMatrix inputT = getInputWithBias(srcSlice->networkInput).transpose();
         bpContext.gradientAccum.IncrementWeights(connection.first, delta * inputT);
-        // cout << "increment weight: " << connection.first.srcLayerId << "-"
-        // << connection.first.dstLayerId << endl;
       } else { // The source is another layer from the srcSlice.
         const Layer &srcLayer = findLayer(connection.first.srcLayerId);
-        const LayerMemoryData *lmd = srcSlice->GetLayerData(srcLayer.layerId);
-        assert(lmd != nullptr && lmd->haveOutput);
+        const ConnectionMemoryData *cmd = srcSlice->GetConnectionData(connection.first);
+        assert(cmd != nullptr && cmd->haveActivation);
 
         // Accumulate the gradient for the connection weight.
-        EMatrix inputT = getInputWithBias(lmd->output).transpose();
+        EMatrix inputT = getInputWithBias(cmd->activation).transpose();
         bpContext.gradientAccum.IncrementWeights(connection.first, delta * inputT);
-        // cout << "increment weight: " << connection.first.srcLayerId << "-"
-        // << connection.first.dstLayerId << endl;
 
         // Now increment the delta for the src layer.
         int nRows = connection.second.rows();
@@ -162,7 +145,7 @@ struct RNN::RNNImpl {
         EMatrix srcDelta = noBiasWeights.transpose() * delta;
         assert(srcLayer.numNodes == srcDelta.rows());
 
-        componentScale(srcDelta, lmd->derivative);
+        componentScale(srcDelta, cmd->derivative);
         LayerAccum &deltaAccum =
             bpContext.deltaAccum.IncrementDelta(srcLayer.layerId, srcTimestamp, srcDelta);
 
@@ -195,36 +178,56 @@ struct RNN::RNNImpl {
     return layers.back();
   }
 
-  EMatrix forwardPass(const EMatrix &input, const TimeSlice *prevSlice, TimeSlice &curSlice) {
-    EMatrix output;
+  EMatrix forwardPass(const TimeSlice *prevSlice, TimeSlice &curSlice, bool doDropout) {
     for (const auto &layer : layers) {
-      pair<EMatrix, EMatrix> layerOut = getLayerOutput(layer, prevSlice, curSlice, input);
+      pair<EMatrix, EMatrix> layerOut = getLayerOutput(layer, prevSlice, curSlice);
 
-      LayerMemoryData *lmd = curSlice.GetLayerData(layer.layerId);
-      assert(lmd != nullptr);
+      for (const auto &oc : layer.outgoing) {
+        ConnectionMemoryData *cmd = curSlice.GetConnectionData(oc);
+        assert(cmd != nullptr);
 
-      lmd->output = layerOut.first;
-      lmd->derivative = layerOut.second;
-      lmd->haveOutput = true;
+        cmd->activation = layerOut.first;
+        cmd->derivative = layerOut.second;
+        cmd->haveActivation = true;
+
+        // only apply dropout for non-skip recurrent connections.
+        if (doDropout && oc.timeOffset == 0) {
+          applyDropout(cmd->activation, cmd->derivative);
+        }
+
+        if (!doDropout && oc.timeOffset == 0) {
+          cmd->activation *= spec.nodeActivationRate;
+        }
+      }
 
       if (layer.isOutput) {
-        output = layerOut.first;
+        curSlice.networkOutput = layerOut.first;
       }
     }
 
-    assert(output.rows() == spec.numOutputs);
-    assert(output.cols() == input.cols());
-    return output;
+    assert(curSlice.networkOutput.rows() == spec.numOutputs);
+    return curSlice.networkOutput;
+  }
+
+  void applyDropout(EMatrix &activation, EMatrix &derivative) {
+    for (int r = 0; r < activation.rows(); r++) {
+      for (int c = 0; c < activation.cols(); c++) {
+        if (math::UnitRand() > spec.nodeActivationRate) {
+          activation(r, c) = 0.0f;
+          derivative(r, c) = 0.0f;
+        }
+      }
+    }
   }
 
   // Returns the output vector of the layer, and the derivative vector for the layer.
   pair<EMatrix, EMatrix> getLayerOutput(const Layer &layer, const TimeSlice *prevSlice,
-                                        const TimeSlice &curSlice, const EMatrix &networkInput) {
-    EMatrix incoming(layer.numNodes, networkInput.cols());
+                                        const TimeSlice &curSlice) {
+    EMatrix incoming(layer.numNodes, curSlice.networkInput.cols());
     incoming.fill(0.0f);
 
     for (const auto &connection : layer.weights) {
-      incrementIncomingWithConnection(connection, prevSlice, curSlice, networkInput, incoming);
+      incrementIncomingWithConnection(connection, prevSlice, curSlice, incoming);
     }
 
     return performLayerActivations(layer, incoming);
@@ -232,25 +235,25 @@ struct RNN::RNNImpl {
 
   void incrementIncomingWithConnection(const pair<LayerConnection, EMatrix> &connection,
                                        const TimeSlice *prevSlice, const TimeSlice &curSlice,
-                                       const EMatrix &networkInput, EMatrix &incoming) {
+                                       EMatrix &incoming) {
 
     if (connection.first.srcLayerId == 0) { // special case for input
       assert(connection.first.timeOffset == 0);
-      incoming += connection.second * getInputWithBias(networkInput);
+      incoming += connection.second * getInputWithBias(curSlice.networkInput);
     } else {
-      const LayerMemoryData *layerMemory = nullptr;
+      const ConnectionMemoryData *connectionMemory = nullptr;
 
       if (connection.first.timeOffset == 0) {
-        layerMemory = curSlice.GetLayerData(connection.first.srcLayerId);
-        assert(layerMemory != nullptr);
+        connectionMemory = curSlice.GetConnectionData(connection.first);
+        assert(connectionMemory != nullptr);
       } else if (prevSlice != nullptr) {
-        layerMemory = prevSlice->GetLayerData(connection.first.srcLayerId);
-        assert(layerMemory != nullptr);
+        connectionMemory = prevSlice->GetConnectionData(connection.first);
+        assert(connectionMemory != nullptr);
       }
 
-      if (layerMemory != nullptr) {
-        assert(layerMemory->haveOutput);
-        incoming += connection.second * getInputWithBias(layerMemory->output);
+      if (connectionMemory != nullptr) {
+        assert(connectionMemory->haveActivation);
+        incoming += connection.second * getInputWithBias(connectionMemory->activation);
       }
     }
   }

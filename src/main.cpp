@@ -30,12 +30,12 @@ void testFFNetwork(string path) {
 void testRNN(string path) {
   CharacterStream cstream(path);
 
-  RNNTrainer trainer(16);
-  auto network = trainer.TrainLanguageNetwork(cstream, 100000);
+  RNNTrainer trainer(64);
+  auto network = trainer.TrainLanguageNetwork(cstream, 1000000);
 
   RNNSampler sampler(cstream.VectorDimension());
   // RNNBeamSampler sampler(cstream.VectorDimension());
-  vector<unsigned> sampled = sampler.SampleCharacters(network.get(), 1000);
+  vector<unsigned> sampled = sampler.SampleCharacters(network.get(), 10000);
 
   for (const auto sample : sampled) {
     cout << cstream.Decode(sample);

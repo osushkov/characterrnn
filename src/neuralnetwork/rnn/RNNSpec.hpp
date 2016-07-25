@@ -20,7 +20,7 @@ struct LayerConnection {
     assert(timeOffset == 0 || timeOffset == 1);
   }
 
-  bool operator==(const LayerConnection &other) {
+  bool operator==(const LayerConnection &other) const {
     return this->srcLayerId == other.srcLayerId && this->dstLayerId == other.dstLayerId &&
            this->timeOffset == other.timeOffset;
   }

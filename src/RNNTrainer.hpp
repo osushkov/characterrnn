@@ -6,7 +6,7 @@
 
 class RNNTrainer {
 public:
-  RNNTrainer(unsigned traceLength);
+  RNNTrainer(unsigned miniTraceLength);
   ~RNNTrainer();
 
   uptr<neuralnetwork::rnn::RNN> TrainLanguageNetwork(CharacterStream &cStream, unsigned iters);

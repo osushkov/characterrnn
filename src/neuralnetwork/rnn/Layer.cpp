@@ -58,5 +58,9 @@ Layer::Layer(const RNNSpec &nnSpec, const LayerSpec &layerSpec)
       EMatrix weightsMatrix = createWeightsMatrix(inputSize, numNodes);
       weights.emplace_back(lc, weightsMatrix);
     }
+
+    if (lc.srcLayerId == layerId) {
+      outgoing.push_back(lc);
+    }
   }
 }

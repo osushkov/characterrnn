@@ -9,54 +9,53 @@
 namespace neuralnetwork {
 namespace rnn {
 
-struct LayerMemoryData {
-  EMatrix output; // batch output, column per batch element.
+struct ConnectionMemoryData {
+  LayerConnection connection;
+  bool haveActivation;
+
+  EMatrix activation; // batch output, column per batch element.
   EMatrix derivative;
 
-  unsigned layerId;
-  bool haveOutput;
+  ConnectionMemoryData(const LayerConnection &connection, int rows, int cols)
+      : connection(connection), haveActivation(false), activation(rows, cols),
+        derivative(rows, cols) {
+    activation.fill(0.0f);
+    derivative.fill(0.0f);
+  }
 };
 
 struct TimeSlice {
   int timestamp;
   EMatrix networkInput;
-  vector<LayerMemoryData> layerData;
+  EMatrix networkOutput;
+  vector<ConnectionMemoryData> connectionData;
 
   TimeSlice(int timestamp, const EMatrix &networkInput, const vector<Layer> &layers)
       : timestamp(timestamp), networkInput(networkInput) {
     assert(networkInput.cols() > 0);
 
-    layerData.reserve(layers.size());
     for (const auto &layer : layers) {
-      layerData.push_back(LayerMemoryData());
-
-      LayerMemoryData &lmd = layerData.back();
-      lmd.layerId = layer.layerId;
-
-      lmd.output = EMatrix(layer.numNodes, networkInput.cols());
-      lmd.output.fill(0.0f);
-
-      lmd.derivative = EMatrix(layer.numNodes, networkInput.cols());
-      lmd.derivative.fill(0.0f);
-
-      lmd.haveOutput = false;
+      for (const auto &c : layer.outgoing) {
+        connectionData.push_back(ConnectionMemoryData(c, layer.numNodes, networkInput.cols()));
+      }
     }
   }
 
-  const LayerMemoryData *GetLayerData(unsigned layerId) const {
-    for (auto &lmd : layerData) {
-      if (lmd.layerId == layerId) {
-        return &lmd;
+  const ConnectionMemoryData *GetConnectionData(const LayerConnection &c) const {
+    for (auto &cmd : connectionData) {
+      if (cmd.connection == c) {
+        return &cmd;
       }
     }
+
     return nullptr;
   }
 
   // TODO: use const_cast to not have duplicate code.
-  LayerMemoryData *GetLayerData(unsigned layerId) {
-    for (auto &lmd : layerData) {
-      if (lmd.layerId == layerId) {
-        return &lmd;
+  ConnectionMemoryData *GetConnectionData(const LayerConnection &connection) {
+    for (auto &cmd : connectionData) {
+      if (cmd.connection == connection) {
+        return &cmd;
       }
     }
     return nullptr;

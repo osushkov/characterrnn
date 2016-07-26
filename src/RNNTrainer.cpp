@@ -149,7 +149,7 @@ struct RNNTrainer::RNNTrainerImpl {
     spec.connections.emplace_back(3, 4, 0);
 
     // Recurrent self-connections for layers 1 and 2.
-    spec.connections.emplace_back(1, 2, 1);
+    spec.connections.emplace_back(1, 1, 1);
     spec.connections.emplace_back(2, 2, 1);
     spec.connections.emplace_back(3, 3, 1);
 

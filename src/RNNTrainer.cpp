@@ -138,7 +138,7 @@ struct RNNTrainer::RNNTrainerImpl {
     spec.numOutputs = outputSize;
     spec.hiddenActivation = LayerActivation::ELU;
     spec.outputActivation = LayerActivation::SOFTMAX;
-    spec.nodeActivationRate = 0.7f;
+    spec.nodeActivationRate = 1.0f;
 
     // Connect layer 1 to the input.
     spec.connections.emplace_back(0, 1, 0);
@@ -146,18 +146,15 @@ struct RNNTrainer::RNNTrainerImpl {
     // Connection layer 1 to layer 2, layer 2 to the output layer.
     spec.connections.emplace_back(1, 2, 0);
     spec.connections.emplace_back(2, 3, 0);
-    spec.connections.emplace_back(3, 4, 0);
 
     // Recurrent self-connections for layers 1 and 2.
     spec.connections.emplace_back(1, 1, 1);
     spec.connections.emplace_back(2, 2, 1);
-    spec.connections.emplace_back(3, 3, 1);
 
     // 2 layers, 1 hidden.
-    spec.layers.emplace_back(1, 32, false);
+    spec.layers.emplace_back(1, 64, false);
     spec.layers.emplace_back(2, 128, false);
-    spec.layers.emplace_back(3, 128, false);
-    spec.layers.emplace_back(4, outputSize, true);
+    spec.layers.emplace_back(3, outputSize, true);
 
     return make_unique<RNN>(spec);
   }

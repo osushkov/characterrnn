@@ -31,7 +31,7 @@ void testRNN(string path) {
   CharacterStream cstream(path);
 
   RNNTrainer trainer(24);
-  auto network = trainer.TrainLanguageNetwork(cstream, 3000000);
+  auto network = trainer.TrainLanguageNetwork(cstream, 5000000);
 
   RNNSampler sampler(cstream.VectorDimension());
   // RNNBeamSampler sampler(cstream.VectorDimension());
